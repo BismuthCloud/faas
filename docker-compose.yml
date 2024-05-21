@@ -42,17 +42,6 @@ services:
     networks:
       - app_network
 
-  foundationdb:
-    image: bismuth/fdb
-    build:
-      dockerfile: Dockerfile.fdb
-      context: .
-    hostname: foundationdb
-    ports:
-      - "4500:4500"
-    networks:
-      - app_network
-
 volumes:
   zookeeper1_data:
   zookeeper1_datalog:
@@ -60,7 +49,6 @@ volumes:
   zookeeper2_datalog:
   zookeeper3_data:
   zookeeper3_datalog:
-
 
 networks:
   app_network:
