@@ -8,9 +8,6 @@ on:
 jobs:
   build-push:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: faas/bismuthd/
 
     steps:
       - name: Checkout code
@@ -41,7 +38,7 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            faas/bismuthd/target/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-release
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -89,5 +86,5 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            faas/bismuthd/target/
+            target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-release
