@@ -1,0 +1,17 @@
+{
+	"name": "Bismuth FaaS",
+	"dockerComposeFile": [
+		"../docker-compose.yml",
+		"docker-compose.yml"
+	],
+	"service": "devcontainer",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer"
+			]
+		}
+	},
+	"postStartCommand": "nohup bash -c '/usr/bin/containerd &' >/dev/null 2>&1"
+}

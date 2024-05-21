@@ -1,0 +1,67 @@
+version: '3.7'
+services:
+  zookeeper1:
+    image: zookeeper:3.9
+    hostname: zookeeper1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181 server.2=zookeeper2:2888:3888;2181 server.3=zookeeper3:2888:3888;2181
+    volumes:
+      - zookeeper1_data:/data
+      - zookeeper1_datalog:/datalog
+    networks:
+      - app_network
+
+  zookeeper2:
+    image: zookeeper:3.9
+    hostname: zookeeper2
+    ports:
+      - "2182:2181"
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zookeeper1:2888:3888;2181 server.2=0.0.0.0:2888:3888;2181 server.3=zookeeper3:2888:3888;2181
+    volumes:
+      - zookeeper2_data:/data
+      - zookeeper2_datalog:/datalog
+    networks:
+      - app_network
+
+  zookeeper3:
+    image: zookeeper:3.9
+    hostname: zookeeper3
+    ports:
+      - "2183:2181"
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zookeeper1:2888:3888;2181 server.2=zookeeper2:2888:3888;2181 server.3=0.0.0.0:2888:3888;2181
+    volumes:
+      - zookeeper3_data:/data
+      - zookeeper3_datalog:/datalog
+    networks:
+      - app_network
+
+  foundationdb:
+    image: bismuth/fdb
+    build:
+      dockerfile: Dockerfile.fdb
+      context: .
+    hostname: foundationdb
+    ports:
+      - "4500:4500"
+    networks:
+      - app_network
+
+volumes:
+  zookeeper1_data:
+  zookeeper1_datalog:
+  zookeeper2_data:
+  zookeeper2_datalog:
+  zookeeper3_data:
+  zookeeper3_datalog:
+
+
+networks:
+  app_network:
+    driver: bridge

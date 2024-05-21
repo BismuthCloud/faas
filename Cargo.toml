@@ -1,0 +1,40 @@
+[workspace]
+members = [
+    "api",
+    "bismuth_common",
+    "bismuthfe",
+    "bismuthd",
+    "svcprovider",
+    "bismuthctl",
+]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = { version = "1.0.79", features = ["backtrace"]}
+thiserror = "1.0.59"
+axum = { version = "0.6.20", features = ["macros"]}  # this version is dictated by whatever is used in the tonic that opentelemetry uses. screams.
+clap = { version = "4.4.11", features = ["derive"] }
+futures = "0.3.30"
+rand = "0.8.5"
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
+tokio = { version = "1.35.1", features = ["full"] }
+tokio-stream = "0.1.14"
+tokio-util = "0.7.10"
+uuid = { version = "1.6.1", features = ["v4", "serde"] }
+conhash = "0.5.1"
+http = "1.0.0"
+http-body = "0.4.6"
+log = "0.4.20"
+opentelemetry = "0.21.0"
+opentelemetry-http = "0.10.0"
+tracing = "0.1.40"
+tracing-opentelemetry = "0.22.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+url = { version = "2.5.0", features = ["serde"] }
+zookeeper-client = "0.6.2"
+tower-http = { version = "0.4.0", features = ["validate-request", "auth", "trace"] }
+hyper = { version = "0.14", features = ["full"] }
+sentry = { version = "0.31.8", features = ["anyhow", "tracing", "tower", "tower-http"]}
+tower = "0.4.13"
+axum-tracing-opentelemetry = "0.15"

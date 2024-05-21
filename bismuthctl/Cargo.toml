@@ -1,0 +1,22 @@
+[package]
+name = "bismuthctl"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bismuthctl"
+path = "src/bismuthctl.rs"
+
+[dependencies]
+anyhow = {workspace = true}
+clap = {workspace = true}
+clap-verbosity-flag = "2.1.1"
+uuid = { workspace = true }
+zookeeper-client = { workspace = true}
+env_logger = "0.10.1"
+url = {workspace = true}
+bismuth_common = { path = "../bismuth_common" }
+log = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+tokio = {workspace = true}

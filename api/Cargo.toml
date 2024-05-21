@@ -1,0 +1,31 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "api"
+path = "src/api.rs"
+
+[dependencies]
+anyhow = {workspace = true}
+clap = {workspace = true}
+uuid = { workspace = true }
+zookeeper-client = { workspace = true}
+conhash = {workspace = true}
+tracing = {workspace = true}
+tracing-subscriber = { workspace = true}
+tracing-opentelemetry = { workspace = true}
+bismuth_common = { path = "../bismuth_common" }
+tokio = {workspace = true}
+rand = {workspace = true}
+hyper = { workspace = true}
+axum = {workspace = true}
+opentelemetry = {workspace = true}
+opentelemetry-http = {workspace = true}
+serde = {workspace = true}
+serde_json = {workspace = true}
+sentry = {workspace = true}
+tower = {workspace = true}
+scopeguard = "1.2.0"
+axum-tracing-opentelemetry = {workspace = true}

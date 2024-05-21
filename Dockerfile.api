@@ -1,0 +1,9 @@
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y ca-certificates
+
+ARG TARGETARCH
+COPY target/$TARGETARCH/release/api /
+
+EXPOSE 8002
+
+ENTRYPOINT ["/api"]
