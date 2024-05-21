@@ -1,4 +1,4 @@
-# bismuthd (idk, names are hard)
+# Bismuth FaaS
 
 This is the container orchestration system (+ platform service stub) used by [BismuthOS](https://www.bismuthos.com).
 
