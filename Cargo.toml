@@ -4,7 +4,6 @@ members = [
     "bismuth_common",
     "bismuthfe",
     "bismuthd",
-    "svcprovider",
     "bismuthctl",
 ]
 resolver = "2"
