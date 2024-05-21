@@ -60,9 +60,9 @@ struct Cli {
     #[clap(long)]
     bind: Ipv4Addr,
 
-    /// DB hostname/ip that svcprovider will connect to for secret/config storage
+    /// Arguments that will be passed to svcprovider.
     #[clap(long)]
-    svcprovider_db: String,
+    svcprovider_args: Vec<String>,
 }
 
 #[instrument(skip(container_manager, http_client, req))]
@@ -339,7 +339,7 @@ async fn main() -> Result<()> {
                 .parent()
                 .unwrap()
                 .join("svcprovider"),
-            db: args.svcprovider_db,
+            args: args.svcprovider_args,
         },
     )
     .await

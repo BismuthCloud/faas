@@ -961,7 +961,7 @@ mod tests {
 
         let svcprovider_opts = SvcProviderOptions {
             path: PathBuf::from("/bin/true"),
-            db: "".to_string(),
+            args: vec![],
         };
 
         // Ok NOW we can actually test

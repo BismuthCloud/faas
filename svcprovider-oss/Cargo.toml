@@ -1,0 +1,42 @@
+[package]
+name = "svcprovider-oss"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "svcprovider"
+path = "src/svcprovider-oss.rs"
+
+[dependencies]
+anyhow = {workspace = true}
+axum = {workspace = true}
+base64 = "0.21.7"
+futures = {workspace = true}
+tracing = {workspace = true}
+tracing-opentelemetry = {workspace = true}
+tracing-subscriber = { workspace = true}
+bismuth_common = { path = "../bismuth_common" }
+tokio = {workspace = true}
+serde = {workspace = true}
+serde_json  = {workspace = true}
+clap = {workspace = true}
+uuid = {workspace = true}
+http = {workspace = true}
+tower-http = {workspace = true}
+sqlx = {version = "0.7.3", features = ["runtime-tokio", "tls-rustls", "postgres", "time", "uuid"]}
+opentelemetry = {workspace = true}
+opentelemetry-http = {workspace = true}
+sentry = {workspace = true}
+tower = {workspace = true}
+reqwest = "0.11.24"
+axum-tracing-opentelemetry = "0.15"
+aws-config = { version = "1.2.1", features = ["behavior-version-latest"] }
+# K/V
+aws-sdk-dynamodb = "1.23.0"
+# Blob
+aws-sdk-s3 = "1.23.0"
+# Config
+aws-sdk-secretsmanager = "1.23.0"
+
+[dev-dependencies]
+tracing-test = "0.2.4"

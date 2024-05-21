@@ -182,7 +182,7 @@ impl Drop for Container {
 #[derive(Debug, Clone)]
 pub struct SvcProviderOptions {
     pub path: std::path::PathBuf,
-    pub db: String,
+    pub args: Vec<String>,
 }
 
 pub async fn run_in_netns(netns: &File, cmd: &[&str]) -> Result<tokio::process::Child> {
@@ -399,17 +399,18 @@ impl Container {
 
         event!(Level::TRACE, container_id = %self.containerd_id, pid, host_ip = %host_ip, container_ip = %container_ip, "Network setup done");
 
+        let mut svcprovider_args: Vec<String> = vec![
+            "--bind".to_string(),
+            host_ip.to_string(),
+            "--function".to_string(),
+            self.function_id.to_string(),
+            "--auth-token".to_string(),
+            self.node_data.setup.auth_token.to_string(),
+        ];
+        svcprovider_args.extend_from_slice(&svcprovider_opts.args);
+
         let svcprovider = tokio::process::Command::new(&svcprovider_opts.path)
-            .args(&[
-                "--bind",
-                &host_ip.to_string(),
-                "--db",
-                &svcprovider_opts.db,
-                "--function",
-                &self.function_id.to_string(),
-                "--auth-token",
-                &self.node_data.setup.auth_token,
-            ])
+            .args(&svcprovider_args)
             //.uid(1337)  // TODO: permission denied
             //.gid(1337)
             .stdin(std::process::Stdio::null())

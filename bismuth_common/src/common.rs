@@ -9,7 +9,7 @@ use opentelemetry_sdk::{
     Resource,
 };
 use sentry::integrations::anyhow::capture_anyhow;
-use std::{env, net::Ipv4Addr};
+use std::{net::Ipv4Addr};
 use std::{str::FromStr, time::Duration};
 use url::Url;
 use uuid::Uuid;
@@ -201,7 +201,7 @@ pub fn init_tracer(
         opentelemetry_sdk::propagation::TraceContextPropagator::new(),
     );
 
-    if let Ok(opentelemetry_endpoint) = env::var(opentelemetry_otlp::OTEL_EXPORTER_OTLP_ENDPOINT) {
+    if let Ok(opentelemetry_endpoint) = std::env::var(opentelemetry_otlp::OTEL_EXPORTER_OTLP_ENDPOINT) {
         // So many hours wasted on this. The endpoint must not end with a slash for the rust libraries, since it blindly concats /v1/...
         let opentelemetry_endpoint = if opentelemetry_endpoint.ends_with('/') {
             opentelemetry_endpoint[0..opentelemetry_endpoint.len() - 1].to_string()
