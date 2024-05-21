@@ -56,11 +56,17 @@ jobs:
         docker compose up -d
         sleep 3
 
+    - name: Start LocalStack
+      uses: LocalStack/setup-localstack@main
+      with:
+        image-tag: 'latest'
+
     - name: Unit Tests
       run: |
         CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER='sudo -E' \
           RUST_BACKTRACE=1 \
           ZOOKEEPER_CLUSTER=localhost:2181 \
+          LOCALSTACK_URL=localhost:4566 \
           cargo test --verbose
 
     - name: E2E Tests

@@ -429,7 +429,7 @@ mod tests {
     macro_rules! test_app {
         () => {{
             // Setting endpoint_url directly to host.docker.internal:4566 doesn't work.
-            let sa = "host.docker.internal:4566"
+            let sa = std::env::var("LOCALSTACK_URL").unwrap_or("host.docker.internal:4566".to_string())
                 .to_socket_addrs()
                 .unwrap()
                 .next()

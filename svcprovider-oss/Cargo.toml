@@ -23,7 +23,6 @@ clap = {workspace = true}
 uuid = {workspace = true}
 http = {workspace = true}
 tower-http = {workspace = true}
-sqlx = {version = "0.7.3", features = ["runtime-tokio", "tls-rustls", "postgres", "time", "uuid"]}
 opentelemetry = {workspace = true}
 opentelemetry-http = {workspace = true}
 sentry = {workspace = true}
