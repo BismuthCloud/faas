@@ -3,6 +3,10 @@ name = "bismuthfe"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "bismuthfe"
+path = "src/bismuthfe.rs"
+
 [[bin]]
 name = "bismuthfe"
 path = "src/bismuthfe.rs"

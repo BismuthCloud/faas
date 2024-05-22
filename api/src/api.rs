@@ -13,8 +13,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr as _;
 use std::sync::Arc;
 use tower::ServiceBuilder;
-use tracing::{instrument, Instrument as _};
-use tracing_opentelemetry::OpenTelemetrySpanExt as _;
+use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use uuid::Uuid;
@@ -25,9 +24,9 @@ use bismuth_common::{
 };
 
 pub struct ControlPlaneState {
-    zookeeper: String,
-    zookeeper_env: String,
-    http_client: hyper::client::Client<hyper::client::HttpConnector, hyper::Body>,
+    pub zookeeper: String,
+    pub zookeeper_env: String,
+    pub http_client: hyper::client::Client<hyper::client::HttpConnector, hyper::Body>,
 }
 
 impl ControlPlaneState {
@@ -54,7 +53,7 @@ struct FunctionStatus {
     backends: Vec<BackendStatus>,
 }
 
-async fn pick_backend(zk: &zookeeper_client::Client) -> Result<Backend> {
+pub async fn pick_backend(zk: &zookeeper_client::Client) -> Result<Backend> {
     let container_id = Uuid::new_v4();
 
     let nodes: Vec<Ipv4Addr> = zk
@@ -357,8 +356,6 @@ pub fn app() -> axum::Router<Arc<ControlPlaneState>> {
                 .delete(function_delete),
         )
         .route("/function/:function_id/logs", get(function_logs))
-        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
-        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
 }
 
 /// FaaS API (controlplane)
@@ -394,6 +391,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let http_client = hyper::Client::new();
 
     let app = app()
+        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
+        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
         .with_state(Arc::new(ControlPlaneState {
             zookeeper: args.zookeeper,
             zookeeper_env: args.zookeeper_env,

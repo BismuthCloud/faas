@@ -7,7 +7,7 @@ use axum::{
     routing::get,
     Router,
 };
-use bismuth_common::init_tracer;
+use bismuth_common::{init_tracer, SVCPROVIDER_PORT};
 use clap::Parser;
 use std::{
     collections::HashMap,
@@ -408,7 +408,7 @@ async fn main() -> Result<()> {
         tower_http::validate_request::ValidateRequestHeaderLayer::bearer(&args.auth_token),
     );
 
-    Ok(axum::Server::bind(&SocketAddr::from((args.bind, 9000)))
+    Ok(axum::Server::bind(&SocketAddr::from((args.bind, SVCPROVIDER_PORT)))
         .serve(app.into_make_service())
         .await?)
 }

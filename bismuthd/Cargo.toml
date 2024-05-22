@@ -3,6 +3,10 @@ name = "bismuthd"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "bismuthd"
+path = "src/bismuthd.rs"
+
 [[bin]]
 name = "bismuthd"
 path = "src/bismuthd.rs"

@@ -42,13 +42,13 @@ struct Cli {
     bind: SocketAddrV4,
 }
 
-struct BackendMonitor {
-    backends: RwLock<HashMap<Uuid, ConsistentHash<Backend>>>,
-    zk: Mutex<zookeeper_client::Client>,
+pub struct BackendMonitor {
+    pub backends: RwLock<HashMap<Uuid, ConsistentHash<Backend>>>,
+    pub zk: Mutex<zookeeper_client::Client>,
 }
 
 impl BackendMonitor {
-    async fn new(zk_cluster: &str, zk_env: &str) -> Result<Arc<Self>> {
+    pub async fn new(zk_cluster: &str, zk_env: &str) -> Result<Arc<Self>> {
         let zk = zookeeper_client::Client::connect(zk_cluster)
             .await
             .context("Error connecting to ZooKeeper")?;
@@ -250,7 +250,7 @@ async fn invoke_function(
     invoke_function_path(state, Path((function_id, "".to_string())), addr, req).await
 }
 
-fn app() -> axum::Router<(
+pub fn app() -> axum::Router<(
     Arc<BackendMonitor>,
     hyper::client::Client<hyper::client::HttpConnector, Body>,
 )> {
@@ -258,9 +258,6 @@ fn app() -> axum::Router<(
         .route("/invoke/:function_id", any(invoke_function))
         .route("/invoke/:function_id/", any(invoke_function))
         .route("/invoke/:function_id/*reqpath", any(invoke_function_path))
-        .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer::default())
-        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
-        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
 }
 
 #[tokio::main]
@@ -279,10 +276,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let monitor = BackendMonitor::new(&args.zookeeper, &args.zookeeper_env).await?;
     let http_client = hyper::Client::new();
 
-    let app = app().with_state((monitor, http_client)).layer(
-        ServiceBuilder::new()
-            .layer(NewSentryLayer::new_from_top())
-            .layer(SentryHttpLayer::with_transaction()),
+    let app = app()
+        .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer::default())
+        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
+        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
+        .with_state((monitor, http_client))
+        .layer(
+            ServiceBuilder::new()
+                .layer(NewSentryLayer::new_from_top())
+                .layer(SentryHttpLayer::with_transaction()),
     );
 
     Ok(axum::Server::bind(&SocketAddr::from(args.bind))

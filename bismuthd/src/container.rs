@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use containerd_client::services::v1::snapshots::snapshots_client::SnapshotsClient;
 use containerd_client::services::v1::snapshots::RemoveSnapshotRequest;
-use containerd_client::services::v1::KillRequest;
 use futures::stream::TryStreamExt as _;
 use nix::libc::{kill, SIGKILL};
 use nix::unistd::getpid;

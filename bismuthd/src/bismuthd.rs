@@ -19,7 +19,7 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt as _;
 use tokio::time::{sleep, timeout};
 use tower::ServiceBuilder;
-use tracing::{event, instrument, Instrument as _, Level};
+use tracing::{event, instrument, Level};
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use uuid::Uuid;
@@ -36,9 +36,9 @@ use bismuth_common::{
     init_sentry, init_tracer, ApiError, ContainerState, InvokeMode, BACKEND_PORT,
 };
 
-mod consts;
-mod container;
-mod container_manager;
+pub mod consts;
+pub mod container;
+pub mod container_manager;
 
 use consts::*;
 use container::SvcProviderOptions;
@@ -294,7 +294,7 @@ async fn get_logs(
     }
 }
 
-fn app() -> axum::Router<(
+pub fn app() -> axum::Router<(
     Arc<ContainerManager>,
     hyper::client::Client<hyper::client::HttpConnector, Body>,
 )> {
@@ -303,8 +303,6 @@ fn app() -> axum::Router<(
         .route("/invoke/:container_id/", any(invoke))
         .route("/invoke/:container_id/*reqpath", any(invoke_path))
         .route("/logs/:container_id", get(get_logs))
-        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
-        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
 }
 
 #[tokio::main]
@@ -347,11 +345,15 @@ async fn main() -> Result<()> {
 
     let http_client = hyper::Client::new();
 
-    let app = app().with_state((manager, http_client)).layer(
-        ServiceBuilder::new()
-            .layer(NewSentryLayer::new_from_top())
-            .layer(SentryHttpLayer::with_transaction()),
-    );
+    let app = app()
+        .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
+        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
+        .with_state((manager, http_client))
+        .layer(
+            ServiceBuilder::new()
+                .layer(NewSentryLayer::new_from_top())
+                .layer(SentryHttpLayer::with_transaction()),
+        );
 
     Ok(
         axum::Server::bind(&SocketAddr::from((args.bind, BACKEND_PORT)))

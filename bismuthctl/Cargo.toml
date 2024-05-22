@@ -3,6 +3,10 @@ name = "bismuthctl"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "bismuthctl"
+path = "src/bismuthctl.rs"
+
 [[bin]]
 name = "bismuthctl"
 path = "src/bismuthctl.rs"
