@@ -7,13 +7,12 @@ use conhash::ConsistentHash;
 use hyper::body::Body;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::str::FromStr;
+use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 use tower::ServiceBuilder;
-use tracing::{event, instrument, Instrument as _, Level};
+use tracing::{event, instrument, Level};
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use uuid::Uuid;
@@ -285,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ServiceBuilder::new()
                 .layer(NewSentryLayer::new_from_top())
                 .layer(SentryHttpLayer::with_transaction()),
-    );
+        );
 
     Ok(axum::Server::bind(&SocketAddr::from(args.bind))
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
