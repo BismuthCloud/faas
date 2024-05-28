@@ -374,7 +374,7 @@ fn app() -> axum::Router<Arc<SVCProviderState>> {
                 .delete(blob_delete),
         )
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
-        .route("/healthz", get(|| async { "OK" }))
+        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024 * 1024)) // 1GB
 }
 
 #[tokio::main]
@@ -406,7 +406,9 @@ async fn main() -> Result<()> {
 
     let app = app().with_state(shared_state.clone()).route_layer(
         tower_http::validate_request::ValidateRequestHeaderLayer::bearer(&args.auth_token),
-    );
+    )
+        .route("/healthz", get(|| async { "OK" }))
+    ;
 
     Ok(axum::Server::bind(&SocketAddr::from((args.bind, SVCPROVIDER_PORT)))
         .serve(app.into_make_service())

@@ -27,6 +27,7 @@ containerd-client = "0.4.0"
 oci-spec = "0.6.4"
 base64 = "0.21.7"
 futures = {workspace = true}
+prost = "0.11.9"
 prost-types = "0.11.9"
 tracing = {workspace = true}
 tracing-opentelemetry = {workspace = true}
@@ -46,6 +47,10 @@ opentelemetry-http = {workspace = true}
 sentry = {workspace = true}
 tower = {workspace = true}
 axum-tracing-opentelemetry = {workspace = true}
+arc-swap = "1.7.1"
 
 [dev-dependencies]
 serial_test = "3.0.0"
+
+[build-dependencies]
+prost-build = "0.11.9"

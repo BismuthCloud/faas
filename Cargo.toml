@@ -15,6 +15,7 @@ thiserror = "1.0.59"
 axum = { version = "0.6.20", features = ["macros"]}  # this version is dictated by whatever is used in the tonic that opentelemetry uses. screams.
 clap = { version = "4.4.11", features = ["derive"] }
 futures = "0.3.30"
+futures-util = "0.3.30"
 rand = "0.8.5"
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0.113"

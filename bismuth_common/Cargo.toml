@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "bismuth_common"
-path = "src/common.rs"
+path = "src/lib.rs"
 
 [dependencies]
 anyhow = {workspace = true}
@@ -24,3 +24,6 @@ http = {workspace = true}
 conhash = {workspace = true}
 axum = {workspace = true}
 sentry = {workspace = true}
+tower = {workspace = true}
+futures-util = {workspace = true}
+pin-project-lite = "0.2"

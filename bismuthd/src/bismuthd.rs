@@ -33,7 +33,8 @@ use containerd_client::tonic::Request;
 use containerd_client::with_namespace;
 
 use bismuth_common::{
-    init_sentry, init_tracer, ApiError, ContainerState, InvokeMode, BACKEND_PORT,
+    init_metrics, init_sentry, init_tracer, ApiError, ContainerState, InvokeMode,
+    OtelAxumMetricsLayer, BACKEND_PORT,
 };
 
 pub mod consts;
@@ -317,7 +318,11 @@ async fn main() -> Result<()> {
         .map_err(|_| anyhow!("bismuthd is already running"))?;
 
     let _sentry_guard = init_sentry();
-    let tracer = init_tracer("bismuthd")?;
+    let tracer = init_tracer(env!("CARGO_PKG_NAME"))?;
+    init_metrics(&[opentelemetry::KeyValue::new(
+        "service.name",
+        env!("CARGO_PKG_NAME"),
+    )]);
 
     let args = Cli::parse();
 
@@ -347,8 +352,9 @@ async fn main() -> Result<()> {
 
     let app = app()
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
-        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
         .with_state((manager, http_client))
+        .layer(OtelAxumMetricsLayer::new())
+        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
         .layer(
             ServiceBuilder::new()
                 .layer(NewSentryLayer::new_from_top())

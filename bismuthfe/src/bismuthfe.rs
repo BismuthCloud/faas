@@ -18,8 +18,8 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 use uuid::Uuid;
 
 use bismuth_common::{
-    init_sentry, init_tracer, pack_backends, unpack_backends, ApiError, Backend, GenericError,
-    BACKEND_PORT,
+    init_metrics, init_sentry, init_tracer, pack_backends, unpack_backends, ApiError, Backend,
+    GenericError, OtelAxumMetricsLayer, BACKEND_PORT,
 };
 
 const CONHASH_REPLICAS: usize = 20;
@@ -262,7 +262,11 @@ pub fn app() -> axum::Router<(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _sentry_guard = init_sentry();
-    let tracer = init_tracer("bismuthfe")?;
+    let tracer = init_tracer(env!("CARGO_PKG_NAME"))?;
+    init_metrics(&[opentelemetry::KeyValue::new(
+        "service.name",
+        env!("CARGO_PKG_NAME"),
+    )]);
 
     let args = Cli::parse();
 
@@ -278,6 +282,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = app()
         .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer::default())
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
+        .layer(OtelAxumMetricsLayer::new())
         .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
         .with_state((monitor, http_client))
         .layer(
