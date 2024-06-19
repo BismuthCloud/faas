@@ -1,6 +1,6 @@
 # Bismuth FaaS
 
-This is the container orchestration system (+ platform service stub) used by [BismuthOS](https://www.bismuthos.com).
+This is the container orchestration system (+ platform service stub) used by [Bismuth Cloud](https://www.bismuth.cloud).
 
 ## Architecture
 
