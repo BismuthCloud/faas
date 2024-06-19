@@ -694,6 +694,8 @@ impl ContainerManager {
         let container = containerd_client::services::v1::Container {
             id: container_id.to_string(),
             image: definition.image.clone(),
+            snapshotter: std::env::var("CONTAINERD_SNAPSHOTTER").unwrap_or("overlayfs".to_string()),
+            snapshot_key: rootfs.path().to_str().unwrap().to_string(),
             runtime: Some(Runtime {
                 name: "io.containerd.runc.v2".to_string(),
                 options: None,
