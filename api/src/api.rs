@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Context, Result};
-use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};

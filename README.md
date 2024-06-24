@@ -2,6 +2,44 @@
 
 This is the container orchestration system (+ platform service stub) used by [Bismuth Cloud](https://www.bismuth.cloud).
 
+## Developing
+### VSCode Devcontainer (Recommended)
+* Open this workspace in a devcontainer
+* `cargo build`
+* `./bootstrap.sh`, or the equivalent:
+    * Bootstrap zookeeper: `./target/debug/bismuthctl --zookeeper zookeeper1:2181 bootstrap`
+    * Provision the node you're on, e.g. `./target/debug/bismuthctl --zookeeper zookeeper1:2181 provision 127.0.0.1`
+    * Create a function to run:
+      * `./target/debug/bismuthctl --zookeeper zookeeper1:2181 create-function docker.io/library/alpine:latest 'exec:/bin/ls'` to run /bin/ls on each request
+      * `./target/debug/bismuthctl --zookeeper zookeeper1:2181 create-function docker.io/library/python:3.11 'server:8000:/usr/local/bin/python3 -m http.server'` to run python's web server as init and proxy to it for requests.
+    * Mark the current node as a backend for the function: `./target/debug/bismuthctl --zookeeper zookeeper1:2181 add-backend {id from create-function above} 127.0.0.1`
+
+### On Host
+* Install Rust
+* Install deps: `apt-get install -y curl make clang pkg-config libssl-dev libfmt-dev protobuf-compiler containerd iptables iproute2 tmux`
+* Build: `cargo build`
+* Bring up ancillary services: `docker-compose up -d`
+* `./bootstrap.sh`
+
+## Using
+* Run `./start_all.sh` to start frontend, backend, and API.
+* Now you should be able to `curl http://localhost:8000/invoke/{function id}`
+
+### In case of containerd issues
+
+If you need to manually remove a container (everything should be cleaned up on startup but something will always go wrong in a new and unexpected way):
+* `sudo ctr -n=bismuth task list` to get the PID of the init task
+* `sudo kill -9` it
+* `sudo ctr -n=bismuth container rm {container_id}`
+* `sudo ctr -n=bismuth snapshots rm /run/bismuthd/roots/{container_id}`
+
+### In case of zookeeper issues (cluster consistency, old function specs, etc.)
+
+* Easiest is to just destroy the cluster and re-create per setup above.
+  * `/usr/share/zookeeper/bin/zkCli.sh`
+  * `deleteall /default`
+
+
 ## Architecture
 
 The frontend (`bismuthfe`) is the external-facing entrypoint of the service, responsible for routing requests to assigned backends.
@@ -28,39 +66,6 @@ Everything is chrooted into an arbitrary "environment" (default is "default") so
   * `/node/{ip}` has one byte value 0 or 1 with enabled status (whether this node should be considered for scheduling)
   * `/node/{ip}/container` has children znodes for each container that the host serves
   * `/node/{ip}/container/{id}` is a znode with the function id and any associated metadata set on the node (e.g. host-internal IP)
-
-
-## Basic Setup
-
-### Developing
-#### VSCode Devcontainer
-* Open this workspace in a devcontainer
-* `cargo build`
-* `./bootstrap.sh`, or the equivalent:
-    * Bootstrap zookeeper: `./target/debug/bismuthctl --zookeeper zookeeper1:2181 bootstrap`
-    * Provision the node you're on, e.g. `./target/debug/bismuthctl --zookeeper zookeeper1:2181 provision 127.0.0.1`
-    * Create a function to run:
-      * `./target/debug/bismuthctl --zookeeper zookeeper1:2181 create-function docker.io/library/alpine:latest 'exec:/bin/ls'` to run /bin/ls on each request
-      * `./target/debug/bismuthctl --zookeeper zookeeper1:2181 create-function docker.io/library/python:3.11 'server:8000:/usr/local/bin/python3 -m http.server'` to run python's web server as init and proxy to it for requests.
-    * Mark the current node as a backend for the function: `./target/debug/bismuthctl --zookeeper zookeeper1:2181 add-backend {id from create-function above} 127.0.0.1`
-
-### Using
-* Run `./start_all.sh` to start frontend, backend, and API.
-* Now you should be able to `curl http://localhost:8000/invoke/{function id}`
-
-### In case of containerd issues
-
-If you need to manually remove a container (everything should be cleaned up on startup but something will always go wrong in a new and unexpected way):
-* `sudo ctr -n=bismuth task list` to get the PID of the init task
-* `sudo kill -9` it
-* `sudo ctr -n=bismuth container rm {container_id}`
-* `sudo ctr -n=bismuth snapshots rm /run/bismuthd/roots/{container_id}`
-
-### In case of zookeeper issues (cluster consistency, old function specs, etc.)
-
-* Easiest is to just destroy the cluster and re-create per setup above.
-  * `/usr/share/zookeeper/bin/zkCli.sh`
-  * `deleteall /default`
 
 
 ## Why no k8s?
