@@ -103,6 +103,14 @@ impl ContainerRoot {
                 builder.clone(&url.to_string(), &dst)
             })
             .await??;
+
+            tokio::process::Command::new("chown")
+                .args(&["-R", "101000:101000", &c.directory.to_str().unwrap()])
+                .status()
+                .await?
+                .code()
+                .and_then(|c| if c == 0 { Some(()) } else { None })
+                .ok_or(anyhow!("abnormal exit"))?;
         }
 
         Ok(c)
