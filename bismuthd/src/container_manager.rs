@@ -648,6 +648,7 @@ impl ContainerManager {
                     .root(
                         oci_spec::runtime::RootBuilder::default()
                             .path(rootfs.path().to_str().unwrap().to_string())
+                            .readonly(false)
                             .build()?,
                     )
                     .mounts(mounts)
