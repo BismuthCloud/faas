@@ -147,11 +147,8 @@ pub struct ContainerNodeRuntimeData {
     /// Handle to the service proxy process for this container.
     pub svcprovider: tokio::process::Child,
 
-    /// The stdout log file.
-    pub stdout: std::path::PathBuf,
-
-    /// The stderr log file.
-    pub stderr: std::path::PathBuf,
+    /// The unified output log file (both stdout + stderr stream to this).
+    pub unified_logs: std::path::PathBuf,
 
     /// The run state of the container.
     pub state: ContainerState,
@@ -208,16 +205,14 @@ impl Container {
         let mut task_client = TasksClient::new(self.containerd.clone());
         let log_dir = std::path::Path::new(LOGS_BASE_PATH).join(&self.id.to_string());
         tokio::fs::create_dir_all(&log_dir).await?;
-        let stdout = log_dir.join("stdout");
-        tokio::fs::File::create(&stdout).await?;
-        let stderr = log_dir.join("stderr");
-        tokio::fs::File::create(&stderr).await?;
+        let unified_logs = log_dir.join("unified");
+        tokio::fs::File::create(&unified_logs).await?;
 
         let req = CreateTaskRequest {
             container_id: self.containerd_id.clone(),
             stdin: "/dev/null".to_string(),
-            stdout: stdout.to_string_lossy().to_string(),
-            stderr: stderr.to_string_lossy().to_string(),
+            stdout: unified_logs.to_string_lossy().to_string(),
+            stderr: unified_logs.to_string_lossy().to_string(),
             ..Default::default()
         };
         let req = with_namespace!(req, BISMUTH_CONTAINERD_NAMESPACE);
@@ -434,8 +429,7 @@ impl Container {
             host_ip,
             netns,
             svcprovider,
-            stdout,
-            stderr,
+            unified_logs,
             state: ContainerState::Starting,
         });
 

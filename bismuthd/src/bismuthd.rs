@@ -251,11 +251,10 @@ async fn get_logs(
 
     let runtime_data = &container.read().await.node_data.runtime;
     if let Some(runtime_data) = runtime_data {
-        let mut stdout = File::open(&runtime_data.stdout).await?;
-        let mut stderr = File::open(&runtime_data.stderr).await?;
+        let mut logs = File::open(&runtime_data.unified_logs).await?;
 
         if !params.follow.unwrap_or(false) {
-            let stream = tokio_util::io::ReaderStream::new(stderr);
+            let stream = tokio_util::io::ReaderStream::new(logs);
             return Ok(axum::body::boxed(axum::body::StreamBody::new(stream)).into_response());
         }
 
@@ -277,28 +276,18 @@ async fn get_logs(
                     break;
                 }
 
-                let mut outbuf = [0; 4096];
-                let mut errbuf = [0; 4096];
-                let result = tokio::select! {
-                    r = stdout.read(&mut outbuf) => (1, r),
-                    r = stderr.read(&mut errbuf) => (2, r),
-                };
-                match result {
-                    (_, Ok(0)) => {
+                let mut buf = [0; 4096];
+                match logs.read(&mut buf).await {
+                    Ok(0) => {
                         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                     }
-                    (_, Ok(n)) => {
+                    Ok(n) => {
                         // TODO: it's possible this fixed size read lands us in the middle
                         // of a code point, making the output invalid utf8.
-                        let buf = match result {
-                            (1, _) => &outbuf,
-                            (2, _) => &errbuf,
-                            _ => unreachable!(),
-                        };
                         let data = String::from_utf8(buf[..n].to_vec()).unwrap();
                         tx.send(Ok(data)).await.unwrap();
                     }
-                    (_, Err(e)) => {
+                    Err(e) => {
                         event!(Level::WARN, %e, "Error reading from stderr");
                         break;
                     }
