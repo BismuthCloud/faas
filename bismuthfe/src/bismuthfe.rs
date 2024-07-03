@@ -9,7 +9,7 @@ use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tower::ServiceBuilder;
 use tracing::{event, instrument, Level};
@@ -18,8 +18,8 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 use uuid::Uuid;
 
 use bismuth_common::{
-    init_metrics, init_sentry, init_tracer, pack_backends, unpack_backends, ApiError, Backend,
-    GenericError, OtelAxumMetricsLayer, BACKEND_PORT,
+    init_metrics, init_sentry, init_tracer, unpack_backends, ApiError, Backend, GenericError,
+    OtelAxumMetricsLayer, BACKEND_PORT,
 };
 
 const CONHASH_REPLICAS: usize = 20;
@@ -43,32 +43,13 @@ struct Cli {
 
 pub struct BackendMonitor {
     pub backends: RwLock<HashMap<Uuid, ConsistentHash<Backend>>>,
-    pub zk: Mutex<zookeeper_client::Client>,
 }
 
 impl BackendMonitor {
     pub async fn new(zk_cluster: &str, zk_env: &str) -> Result<Arc<Self>> {
-        let zk = zookeeper_client::Client::connect(zk_cluster)
-            .await
-            .context("Error connecting to ZooKeeper")?;
-        let zk = zk
-            .chroot(format!("/{}", zk_env))
-            .map_err(|_| anyhow!("Failed to chroot to env {}", zk_env))?;
-        event!(Level::TRACE, "Connected to ZooKeeper");
-
-        let functions = zk
-            .list_children("/function")
-            .await
-            .context("Error listing functions")?;
-
         let monitor = Arc::new(Self {
             backends: RwLock::new(HashMap::new()),
-            zk: Mutex::new(zk),
         });
-
-        for function in &functions {
-            monitor.load_backends(Uuid::parse_str(function)?).await?;
-        }
 
         let mon_ = monitor.clone();
         let zk_cluster = zk_cluster.to_string();
@@ -105,6 +86,21 @@ impl BackendMonitor {
             )
             .await?;
 
+        let functions = zk
+            .list_children("/function")
+            .await
+            .context("Error listing functions")?;
+
+        mon.backends.write().await.clear();
+        for function in &functions {
+            mon.load_backends(&zk, Uuid::parse_str(function)?).await?;
+        }
+        event!(
+            Level::DEBUG,
+            "Loaded backends for {} functions",
+            functions.len()
+        );
+
         loop {
             let event = watcher.changed().await;
             event!(Level::TRACE, "ZooKeeper event: {:?}", event);
@@ -132,7 +128,7 @@ impl BackendMonitor {
                             .ok_or(anyhow!("Invalid function znode path"))?,
                     )?;
                     event!(Level::DEBUG, function = %function, "Function created");
-                    mon.load_backends(function).await?;
+                    mon.load_backends(&zk, function).await?;
                 }
                 zookeeper_client::EventType::NodeDeleted => {
                     let function = Uuid::parse_str(
@@ -154,7 +150,7 @@ impl BackendMonitor {
                             .ok_or(anyhow!("Invalid function znode path"))?,
                     )?;
                     event!(Level::DEBUG, function = %function, "Function backends updated");
-                    mon.load_backends(function).await?;
+                    mon.load_backends(&zk, function).await?;
                 }
                 _ => {
                     event!(Level::WARN, "Unexpected ZooKeeper event: {:?}", event);
@@ -163,11 +159,8 @@ impl BackendMonitor {
         }
     }
 
-    async fn load_backends(&self, function_id: Uuid) -> Result<()> {
-        let (backends_raw, _) = self
-            .zk
-            .lock()
-            .await
+    async fn load_backends(&self, zk: &zookeeper_client::Client, function_id: Uuid) -> Result<()> {
+        let (backends_raw, _) = zk
             .get_data(&format!("/function/{}/backends", &function_id))
             .await
             .context("Error getting function backends")?;
@@ -301,6 +294,9 @@ mod tests {
     use tokio::time::sleep;
 
     use super::*;
+    use std::net::Ipv4Addr;
+
+    use bismuth_common::pack_backends;
 
     // Equivalent of C's __func__
     // https://stackoverflow.com/a/40234666
