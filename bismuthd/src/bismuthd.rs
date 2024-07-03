@@ -251,6 +251,7 @@ async fn get_logs(
 
     let runtime_data = &container.read().await.node_data.runtime;
     if let Some(runtime_data) = runtime_data {
+        let mut stdout = File::open(&runtime_data.stdout).await?;
         let mut stderr = File::open(&runtime_data.stderr).await?;
 
         if !params.follow.unwrap_or(false) {
@@ -263,21 +264,41 @@ async fn get_logs(
         tokio::spawn(async move {
             loop {
                 if tx.is_closed() {
+                    event!(Level::TRACE, "Streaming logs connection closed");
                     break;
                 }
 
-                let mut buf = [0; 4096];
-                match stderr.read(&mut buf).await {
-                    Ok(0) => {
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                // Check if the container still exists
+                if container_manager.get_container(container_id).await.is_err() {
+                    event!(
+                        Level::TRACE,
+                        "Terminating streaming logs connection: container no longer exists"
+                    );
+                    break;
+                }
+
+                let mut outbuf = [0; 4096];
+                let mut errbuf = [0; 4096];
+                let result = tokio::select! {
+                    r = stdout.read(&mut outbuf) => (1, r),
+                    r = stderr.read(&mut errbuf) => (2, r),
+                };
+                match result {
+                    (_, Ok(0)) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
                     }
-                    Ok(n) => {
+                    (_, Ok(n)) => {
                         // TODO: it's possible this fixed size read lands us in the middle
                         // of a code point, making the output invalid utf8.
+                        let buf = match result {
+                            (1, _) => &outbuf,
+                            (2, _) => &errbuf,
+                            _ => unreachable!(),
+                        };
                         let data = String::from_utf8(buf[..n].to_vec()).unwrap();
                         tx.send(Ok(data)).await.unwrap();
                     }
-                    Err(e) => {
+                    (_, Err(e)) => {
                         event!(Level::WARN, %e, "Error reading from stderr");
                         break;
                     }
