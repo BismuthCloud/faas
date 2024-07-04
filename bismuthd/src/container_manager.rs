@@ -594,20 +594,6 @@ impl ContainerManager {
             ],
         };
 
-        let mut mounts = get_default_mounts();
-        mounts.push(
-            oci_spec::runtime::MountBuilder::default()
-                .destination("/tmp")
-                .typ("tmpfs")
-                .options(vec![
-                    "nosuid".to_string(),
-                    "strictatime".to_string(),
-                    "mode=1777".to_string(),
-                    "size=65536k".to_string(),
-                ])
-                .build()?,
-        );
-
         // New namespaces of every time
         let namespaces = vec![
             oci_spec::runtime::LinuxNamespaceBuilder::default()
@@ -651,7 +637,6 @@ impl ContainerManager {
                             .readonly(false)
                             .build()?,
                     )
-                    .mounts(mounts)
                     .linux(
                         oci_spec::runtime::LinuxBuilder::default()
                             .namespaces(namespaces)
