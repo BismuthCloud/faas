@@ -105,7 +105,7 @@ impl ContainerRoot {
             .await??;
 
             tokio::process::Command::new("chown")
-                .args(&["-R", "101000:101000", &c.directory.to_str().unwrap()])
+                .args(&["-R", "101000:101000", &c.directory.join("repo").to_str().unwrap()])
                 .status()
                 .await?
                 .code()
