@@ -105,7 +105,11 @@ impl ContainerRoot {
             .await??;
 
             tokio::process::Command::new("chown")
-                .args(&["-R", "101000:101000", &c.directory.join("repo").to_str().unwrap()])
+                .args(&[
+                    "-R",
+                    "101000:101000",
+                    &c.directory.join("repo").to_str().unwrap(),
+                ])
                 .status()
                 .await?
                 .code()
@@ -285,27 +289,31 @@ impl Container {
             .code()
             .and_then(|c| if c == 0 { Some(()) } else { None })
             .ok_or(anyhow!("abnormal exit"))?;
-        // Throttle the link: tc qdisc add dev veth-pid root tbf rate 5mbit burst 32kbit latency 100ms
-        tokio::process::Command::new("tc")
-            .args(&[
+        // Throttle the link: tc qdisc add dev ceth-pid root tbf rate 10mbit burst 8mbit latency 100ms
+        run_in_netns(
+            &netns,
+            &[
+                "tc",
                 "qdisc",
                 "add",
                 "dev",
-                &host_link_name,
+                &container_link_name,
                 "root",
                 "tbf",
                 "rate",
-                "5mbit",
+                "10mbit",
                 "burst",
-                "32kbit",
+                "8mbit",
                 "latency",
                 "100ms",
-            ])
-            .status()
-            .await?
-            .code()
-            .and_then(|c| if c == 0 { Some(()) } else { None })
-            .ok_or(anyhow!("abnormal exit"))?;
+            ],
+        )
+        .await?
+        .wait()
+        .await?
+        .code()
+        .and_then(|c| if c == 0 { Some(()) } else { None })
+        .ok_or(anyhow!("abnormal exit"))?;
         // Set IPs on both ends of the veth: ip addr add ...
         // Each container is allocated a /30 in 10/8 based on its pid.
         // Host-side IP is .1, container-side is .2
