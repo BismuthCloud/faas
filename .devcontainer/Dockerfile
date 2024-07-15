@@ -1,5 +1,5 @@
 FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y curl make clang pkg-config libssl-dev libfmt-dev protobuf-compiler containerd iptables iproute2 tmux
+RUN apt-get update && apt-get install -y curl make clang pkg-config libssl-dev libfmt-dev protobuf-compiler containerd iptables iproute2 tmux pgbouncer
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc

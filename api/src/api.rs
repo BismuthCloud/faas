@@ -26,6 +26,7 @@ pub struct ControlPlaneState {
     pub zookeeper: String,
     pub zookeeper_env: String,
     pub http_client: hyper::client::Client<hyper::client::HttpConnector, hyper::Body>,
+    pub hosted_db: sqlx::postgres::PgPool,
 }
 
 impl ControlPlaneState {
@@ -212,6 +213,54 @@ async fn function_create(
         &zookeeper_client::CreateMode::Persistent.with_acls(zookeeper_client::Acls::anyone_all()),
     )?;
 
+    sqlx::raw_sql(&format!(
+        r#"
+CREATE ROLE "{0}_db" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOLOGIN;
+CREATE ROLE "{0}_user" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT LOGIN ENCRYPTED PASSWORD '{0}';
+GRANT "{0}_db" TO "{0}_user";
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&state.hosted_db)
+    .await
+    .context("Error creating function hosted DB")?;
+
+    sqlx::raw_sql(&format!(
+        r#"
+CREATE DATABASE "{0}_db" WITH OWNER="{0}_user";
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&state.hosted_db)
+    .await
+    .context("Error creating function hosted DB")?;
+
+    sqlx::raw_sql(&format!(
+        r#"
+REVOKE ALL ON DATABASE "{0}_db" FROM public;
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&state.hosted_db)
+    .await
+    .context("Error creating function hosted DB")?;
+
+    let connect_opts = (*state.hosted_db.connect_options())
+        .clone()
+        .database(&format!("{}_db", function_id.as_simple().to_string()));
+    let new_db = sqlx::PgPool::connect_with(connect_opts)
+        .await
+        .context("Error connecting to function hosted DB")?;
+    sqlx::raw_sql(&format!(
+        r#"
+GRANT ALL ON SCHEMA public TO "{0}_user" WITH GRANT OPTION;
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&new_db)
+    .await
+    .context("Error granting permissions to function hosted DB")?;
+
     multi
         .commit()
         .await
@@ -340,7 +389,28 @@ async fn function_delete(
         )?;
     }
 
-    multi.commit().await.context("Error updating function")?;
+    multi.commit().await.context("Error deleting function")?;
+
+    sqlx::raw_sql(&format!(
+        r#"
+DROP DATABASE "{0}_db";
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&state.hosted_db)
+    .await
+    .context("Error deleting hosted DB")?;
+
+    sqlx::raw_sql(&format!(
+        r#"
+DROP ROLE "{0}_db";
+DROP ROLE "{0}_user";
+        "#,
+        function_id.as_simple().to_string()
+    ))
+    .execute(&state.hosted_db)
+    .await
+    .context("Error deleting hosted DB roles")?;
 
     Ok(())
 }
@@ -372,6 +442,10 @@ struct Cli {
     /// Bind IP:port
     #[clap(long, global = true, default_value = "0.0.0.0:8002")]
     bind: SocketAddrV4,
+
+    /// Postgres URI for the server hosting the managed DB service
+    #[clap(long)]
+    hosted_db: String,
 }
 
 #[tokio::main]
@@ -389,6 +463,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let http_client = hyper::Client::new();
 
+    let hosted_db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(10)
+        .connect_lazy(&args.hosted_db)?;
+
     let app = app()
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
         .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
@@ -396,6 +474,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             zookeeper: args.zookeeper,
             zookeeper_env: args.zookeeper_env,
             http_client,
+            hosted_db,
         }))
         .layer(
             ServiceBuilder::new()

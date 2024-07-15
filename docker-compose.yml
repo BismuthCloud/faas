@@ -42,6 +42,18 @@ services:
     networks:
       - app_network
 
+  hosteddb:
+    image: postgres:16
+    hostname: hosteddb
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_PASSWORD: password
+    networks:
+      - app_network
+    volumes:
+      - ${PWD}/hosteddb-init.sh:/docker-entrypoint-initdb.d/hosteddb-init.sh
+
 volumes:
   zookeeper1_data:
   zookeeper1_datalog:

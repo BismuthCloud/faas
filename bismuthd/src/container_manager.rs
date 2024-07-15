@@ -5,7 +5,6 @@ use containerd_client::services::v1::snapshots::{ListSnapshotsRequest, RemoveSna
 use containerd_client::services::v1::MetricsRequest;
 use futures::StreamExt;
 use nix::libc::{kill, SIGKILL};
-use oci_spec::runtime::get_default_mounts;
 use prost_types::Any;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};

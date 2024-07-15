@@ -33,3 +33,4 @@ sentry = {workspace = true}
 tower = {workspace = true}
 scopeguard = "1.2.0"
 axum-tracing-opentelemetry = {workspace = true}
+sqlx = {workspace = true}

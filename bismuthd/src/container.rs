@@ -445,12 +445,24 @@ impl Container {
     }
 
     pub async fn terminate(&mut self) -> Result<()> {
+        nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(
+                self.node_data
+                    .runtime
+                    .as_ref()
+                    .unwrap()
+                    .svcprovider
+                    .id()
+                    .unwrap() as _,
+            ),
+            nix::sys::signal::SIGTERM,
+        )?;
         self.node_data
             .runtime
             .as_mut()
             .unwrap()
             .svcprovider
-            .kill()
+            .wait()
             .await?;
 
         let mut task_client = TasksClient::new(self.containerd.clone());

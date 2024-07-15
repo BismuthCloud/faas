@@ -39,3 +39,4 @@ hyper = { version = "0.14", features = ["full"] }
 sentry = { version = "0.31.8", features = ["anyhow", "tracing", "tower", "tower-http"]}
 tower = "0.4.13"
 axum-tracing-opentelemetry = "0.15"
+sqlx = {version = "0.7.3", features = ["runtime-tokio", "tls-rustls", "postgres", "time", "uuid"]}

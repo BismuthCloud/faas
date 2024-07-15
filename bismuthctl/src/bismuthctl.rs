@@ -44,17 +44,6 @@ enum Command {
     },
     ListNodes {},
     ListFunctions {},
-    GetFunction {
-        function_id: Uuid,
-    },
-
-    CreateFunction {
-        image: String,
-        invoke_mode: InvokeMode,
-        repo: Option<url::Url>,
-        #[clap(default_value = "main")]
-        branch: String,
-    },
     AddBackend {
         function_id: Uuid,
         new_backend: Ipv4Addr,
@@ -63,9 +52,6 @@ enum Command {
         function_id: Uuid,
         remove_backend: Ipv4Addr,
         container_id: Uuid,
-    },
-    DeleteFunction {
-        id: Uuid,
     },
 }
 
@@ -397,68 +383,8 @@ async fn main() -> Result<()> {
                 println!("{}", function_id);
             }
         }
-        Command::GetFunction { function_id } => {
-            let function_key = format!("/function/{}", function_id);
-            let (function_raw, _) = zk
-                .get_data(&function_key)
-                .await
-                .context("Error getting function")?;
-            let function: FunctionDefinition = serde_json::from_slice(&function_raw)?;
-
-            println!("FunctionDefinition: {:#?}", function);
-            print!("Backends: ");
-
-            let (function_backends_raw, _) = zk
-                .get_data(&format!("/function/{}/backends", &function_id))
-                .await
-                .context("Failed to read function backend data")?;
-
-            for backend in unpack_backends(&function_backends_raw)? {
-                print!("{}:{} ", backend.ip, backend.container_id);
-            }
-            print!("\n");
-        }
 
         // JUST FOR DEV
-        Command::CreateFunction {
-            image,
-            invoke_mode,
-            repo,
-            branch,
-        } => {
-            let id = Uuid::new_v4().to_string();
-            let function_key = format!("/function/{}", id);
-            let repo = match repo {
-                Some(r) => Some((r.clone(), branch.clone())),
-                None => None,
-            };
-            zk.create(
-                &function_key,
-                &serde_json::to_vec(&FunctionDefinition {
-                    image: image.clone(),
-                    repo,
-                    cpu: 1.0,
-                    memory: 512 * 1024 * 1024,
-                    invoke_mode: invoke_mode.clone(),
-                    max_instances: 1,
-                })?,
-                &zookeeper_client::CreateMode::Persistent
-                    .with_acls(zookeeper_client::Acls::anyone_all()),
-            )
-            .await
-            .context("Error creating function znode")?;
-
-            zk.create(
-                &format!("{}/backends", &function_key),
-                &b""[..],
-                &zookeeper_client::CreateMode::Persistent
-                    .with_acls(zookeeper_client::Acls::anyone_all()),
-            )
-            .await
-            .context("Error creating function backends znode")?;
-
-            println!("{}", id);
-        }
         Command::AddBackend {
             function_id,
             new_backend,
@@ -535,28 +461,6 @@ async fn main() -> Result<()> {
             zk.set_data(&backends_key, &pack_backends(&backends), Some(stat.version))
                 .await
                 .context("Error updating function backends")?;
-        }
-        Command::DeleteFunction { id } => {
-            let function_key = format!("/function/{}", id);
-            let backends_key = format!("{}/backends", &function_key);
-            let (backends_raw, _) = zk
-                .get_data(&backends_key)
-                .await
-                .context("Error getting function backends")?;
-            let backends = unpack_backends(&backends_raw)?;
-            if backends.len() > 0 {
-                return Err(anyhow!(
-                    "Function {} still has backends ({:?})",
-                    id,
-                    backends
-                ));
-            }
-            zk.delete(&format!("{}/backends", &function_key), None)
-                .await
-                .context("Error deleting function backends znode")?;
-            zk.delete(&function_key, None)
-                .await
-                .context("Error deleting function znode")?;
         }
     }
 
