@@ -115,10 +115,11 @@ async fn invoke_path(
                                     .build()?,
                             )
                             .args(args.clone())
-                            .env(vec![format!(
-                                "BISMUTH_AUTH={}",
-                                container.node_data.setup.auth_token
-                            )])
+                            .env(vec![
+                                format!("BISMUTH_AUTH={}", container.node_data.setup.auth_token),
+                                format!("BISMUTH_CONTAINER_ID={}", container_id),
+                                format!("BISMUTH_FUNCTION_ID={}", container.function_id),
+                            ])
                             .build()?,
                     )?
                     .into(),
@@ -179,9 +180,10 @@ async fn invoke_path(
 
             let mut req = req;
             *req.uri_mut() = format!(
-                "http://{}:{}/{}",
+                "http://{}:{}/invoke/{}/{}",
                 container.node_data.runtime.as_ref().unwrap().ip,
                 *dport,
+                container.function_id,
                 reqpath
             )
             .parse()?;

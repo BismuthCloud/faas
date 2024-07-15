@@ -220,6 +220,10 @@ async fn invoke_function_path(
         backend.ip, BACKEND_PORT, backend.container_id, reqpath
     )
     .parse()?;
+    req.headers_mut().insert(
+        "SCRIPT_NAME",
+        format!("/invoke/{}", function_id).parse().unwrap(),
+    );
     let cx = tracing::Span::current().context();
     opentelemetry::global::get_text_map_propagator(|propagator| {
         propagator.inject_context(

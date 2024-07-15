@@ -10,7 +10,7 @@ use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::net::Ipv4Addr;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{event, instrument, Instrument, Level};
 use uuid::Uuid;
@@ -668,7 +668,11 @@ impl ContainerManager {
                                     .build()?,
                             )
                             .args(init_args)
-                            .env(vec![format!("BISMUTH_AUTH={}", auth_token)])
+                            .env(vec![
+                                format!("BISMUTH_AUTH={}", auth_token),
+                                format!("BISMUTH_CONTAINER_ID={}", container_id),
+                                format!("BISMUTH_FUNCTION_ID={}", function_id),
+                            ])
                             .build()?,
                     )
                     .build()?,
