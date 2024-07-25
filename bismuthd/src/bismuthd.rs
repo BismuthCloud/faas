@@ -180,11 +180,12 @@ async fn invoke_path(
 
             let mut req = req;
             *req.uri_mut() = format!(
-                "http://{}:{}/invoke/{}/{}",
+                "http://{}:{}/invoke/{}/{}?{}",
                 container.node_data.runtime.as_ref().unwrap().ip,
                 *dport,
                 container.function_id,
-                reqpath
+                reqpath,
+                req.uri().query().unwrap_or("")
             )
             .parse()?;
             let cx = tracing::Span::current().context();

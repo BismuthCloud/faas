@@ -216,8 +216,12 @@ async fn invoke_function_path(
 
     let mut req = req;
     *req.uri_mut() = format!(
-        "http://{}:{}/invoke/{}/{}",
-        backend.ip, BACKEND_PORT, backend.container_id, reqpath
+        "http://{}:{}/invoke/{}/{}?{}",
+        backend.ip,
+        BACKEND_PORT,
+        backend.container_id,
+        reqpath,
+        req.uri().query().unwrap_or("")
     )
     .parse()?;
     req.headers_mut().insert(
