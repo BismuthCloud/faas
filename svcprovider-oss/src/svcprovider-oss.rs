@@ -334,31 +334,12 @@ async fn blob_list(
             event!(Level::ERROR, "Failed to list blobs: {:?}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    let mut all_kvs = HashMap::new();
+    let mut all_keys = vec![];
     for obj in resp.contents() {
         let key = obj.key.as_ref().unwrap().clone();
-        let value = shared_state
-            .s3
-            .get_object()
-            .bucket(&shared_state.bucket)
-            .key(&key)
-            .send()
-            .await
-            .map_err(|e| {
-                event!(Level::ERROR, "Failed to list blobs: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .body
-            .collect()
-            .await
-            .map_err(|e| {
-                event!(Level::ERROR, "Failed to list blobs: {:?}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .to_vec();
-        all_kvs.insert(key, value);
+        all_keys.push(key);
     }
-    Ok(axum::Json(all_kvs))
+    Ok(axum::Json(all_keys))
 }
 
 fn app() -> axum::Router<Arc<SVCProviderState>> {
@@ -546,7 +527,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             response.into_body().collect().await.unwrap().to_bytes(),
-            json!({"foo": b"put foovalue"}).to_string().as_bytes()
+            json!(["foo"]).to_string().as_bytes()
         );
 
         let response = make_request(&mut app, "DELETE", "/blob/v1/foo", None).await;
