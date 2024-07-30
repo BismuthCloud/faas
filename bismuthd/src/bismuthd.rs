@@ -180,10 +180,9 @@ async fn invoke_path(
 
             let mut req = req;
             *req.uri_mut() = format!(
-                "http://{}:{}/invoke/{}/{}?{}",
+                "http://{}:{}/{}?{}",
                 container.node_data.runtime.as_ref().unwrap().ip,
                 *dport,
-                container.function_id,
                 reqpath,
                 req.uri().query().unwrap_or("")
             )

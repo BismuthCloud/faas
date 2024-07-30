@@ -26,12 +26,21 @@ class ServerInvokeMode:
 
 
 @dataclass
+class FunctionRoute:
+    hostname: str
+    
+    def json(self):
+        return {"hostname": self.hostname}
+
+
+@dataclass
 class FunctionDefinition:
     image: str
     repo: Optional[Tuple[str, str]]
     cpu: float
     memory: int
     invoke_mode: ServerInvokeMode | ExecutableInvokeMode
+    routes: List[str]
     max_instances: int = 1
 
     def json(self):
@@ -47,6 +56,7 @@ class FunctionDefinition:
             "cpu": self.cpu,
             "memory": self.memory,
             "invoke_mode": invoke_mode,
+            "routes": [r.json() for r in self.routes],
             "max_instances": self.max_instances,
         }
 
@@ -85,6 +95,7 @@ if __name__ == "__main__":
         cpu=0.5,
         memory=128 * 1024 * 1024,
         invoke_mode=ServerInvokeMode(["/usr/local/bin/python3", "-m", "http.server"], 8000),
+        routes=[FunctionRoute("test.host.internal")],
     )
     function_resp = requests.post(
         f"{API_URL}/function", json=function_definition.json()
@@ -112,7 +123,7 @@ if __name__ == "__main__":
             assert False, "Function failed to start"
 
         logging.info("Checking function is reachable")
-        resp = requests.get(f"{FRONTEND_URL}/invoke/{function_id}")
+        resp = requests.get(FRONTEND_URL, headers={"Host": "test.host.internal"})
         logging.debug(resp.text)
         assert (
             resp.status_code == 200
@@ -138,7 +149,7 @@ if __name__ == "__main__":
             ), f"Failed to get logs ({resp.status_code}): {resp.text}"
 
             # Invoke function again and ensure new logs are streamed
-            requests.get(f"{FRONTEND_URL}/invoke/{function_id}/again")
+            requests.get(f"{FRONTEND_URL}/again", headers={"Host": "test.host.internal"})
             time.sleep(1)
 
             for line in resp.iter_lines():
@@ -150,7 +161,7 @@ if __name__ == "__main__":
                 assert False, "New request not in streamed logs"
 
         logging.info("Checking new container on update")
-        resp = requests.get(f"{FRONTEND_URL}/invoke/{function_id}")
+        resp = requests.get(FRONTEND_URL, headers={"Host": "test.host.internal"})
         container_before = resp.headers["X-Bismuth-Container-ID"]
         logging.debug(f"Container ID before update: {container_before}")
         resp = requests.put(function.url, data="")
@@ -171,7 +182,7 @@ if __name__ == "__main__":
             time.sleep(1)
         else:
             assert False, "Function failed to start"
-        resp = requests.get(f"{FRONTEND_URL}/invoke/{function_id}")
+        resp = requests.get(FRONTEND_URL, headers={"Host": "test.host.internal"})
         container_after = resp.headers["X-Bismuth-Container-ID"]
         logging.debug(f"Container ID after update: {container_after}")
         assert (

@@ -50,6 +50,12 @@ impl FromStr for InvokeMode {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct FunctionRoute {
+    pub hostname: String,
+    //pub path_prefix: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FunctionDefinition {
     /// Image to use for the container.
     pub image: String,
@@ -68,6 +74,9 @@ pub struct FunctionDefinition {
 
     /// Maximum number of instances of this function to run.
     pub max_instances: u32,
+
+    #[serde(default)]
+    pub routes: Vec<FunctionRoute>,
 }
 
 pub const BACKEND_PORT: u16 = 8001;

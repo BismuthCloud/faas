@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr, SocketAddrV4};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tower::ServiceBuilder;
 use tracing::{event, instrument, Level};
@@ -43,12 +44,14 @@ struct Cli {
 
 pub struct BackendMonitor {
     pub backends: RwLock<HashMap<Uuid, ConsistentHash<Backend>>>,
+    pub routes: RwLock<HashMap<String, Uuid>>,
 }
 
 impl BackendMonitor {
     pub async fn new(zk_cluster: &str, zk_env: &str) -> Result<Arc<Self>> {
         let monitor = Arc::new(Self {
             backends: RwLock::new(HashMap::new()),
+            routes: RwLock::new(HashMap::new()),
         });
 
         let mon_ = monitor.clone();
@@ -79,9 +82,16 @@ impl BackendMonitor {
             .map_err(|_| anyhow!("Failed to chroot to env {}", zk_env))?;
         event!(Level::TRACE, "Connected to ZooKeeper");
 
-        let mut watcher = zk
+        let mut func_watcher = zk
             .watch(
                 "/function",
+                zookeeper_client::AddWatchMode::PersistentRecursive,
+            )
+            .await?;
+
+        let mut route_watcher = zk
+            .watch(
+                "/route",
                 zookeeper_client::AddWatchMode::PersistentRecursive,
             )
             .await?;
@@ -101,62 +111,152 @@ impl BackendMonitor {
             functions.len()
         );
 
-        loop {
-            let event = watcher.changed().await;
-            event!(Level::TRACE, "ZooKeeper event: {:?}", event);
+        let routes = zk
+            .list_children("/route")
+            .await
+            .context("Error listing routes")?;
 
-            if event.event_type == zookeeper_client::EventType::Session
-                && (event.session_state == zookeeper_client::SessionState::Disconnected
-                    || event.session_state == zookeeper_client::SessionState::Expired
-                    || event.session_state == zookeeper_client::SessionState::Closed)
-            {
-                event!(Level::ERROR, "ZooKeeper session disconnected or terminal");
-                return Err(anyhow!("ZooKeeper session disconnected or terminal"));
-            }
-
-            if !event.path.ends_with("/backends") {
-                continue;
-            }
-
-            match event.event_type {
-                zookeeper_client::EventType::NodeCreated => {
-                    let function = Uuid::parse_str(
-                        event
-                            .path
-                            .split('/')
-                            .nth(2)
-                            .ok_or(anyhow!("Invalid function znode path"))?,
-                    )?;
-                    event!(Level::DEBUG, function = %function, "Function created");
-                    mon.load_backends(&zk, function).await?;
-                }
-                zookeeper_client::EventType::NodeDeleted => {
-                    let function = Uuid::parse_str(
-                        event
-                            .path
-                            .split('/')
-                            .nth(2)
-                            .ok_or(anyhow!("Invalid function znode path"))?,
-                    )?;
-                    event!(Level::DEBUG, function = %function, "Function deleted");
-                    mon.backends.write().await.remove(&function);
-                }
-                zookeeper_client::EventType::NodeDataChanged => {
-                    let function = Uuid::parse_str(
-                        event
-                            .path
-                            .split('/')
-                            .nth(2)
-                            .ok_or(anyhow!("Invalid function znode path"))?,
-                    )?;
-                    event!(Level::DEBUG, function = %function, "Function backends updated");
-                    mon.load_backends(&zk, function).await?;
-                }
-                _ => {
-                    event!(Level::WARN, "Unexpected ZooKeeper event: {:?}", event);
-                }
-            }
+        mon.routes.write().await.clear();
+        for route in &routes {
+            let target = Uuid::from_slice(
+                &zk.get_data(&format!("/route/{}", route))
+                    .await
+                    .context("Error getting route target")?
+                    .0,
+            )?;
+            mon.routes.write().await.insert(route.clone(), target);
         }
+        event!(Level::DEBUG, "Loaded {} routes", routes.len());
+
+        let mon_ = mon.clone();
+        let zk_ = zk.clone();
+        let func_watch: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
+            loop {
+                let event = func_watcher.changed().await;
+                event!(Level::TRACE, "ZooKeeper event: {:?}", event);
+
+                if event.event_type == zookeeper_client::EventType::Session
+                    && (event.session_state == zookeeper_client::SessionState::Disconnected
+                        || event.session_state == zookeeper_client::SessionState::Expired
+                        || event.session_state == zookeeper_client::SessionState::Closed)
+                {
+                    event!(Level::ERROR, "ZooKeeper session disconnected or terminal");
+                    return Err(anyhow!("ZooKeeper session disconnected or terminal"));
+                }
+
+                if !event.path.ends_with("/backends") {
+                    continue;
+                }
+
+                match event.event_type {
+                    zookeeper_client::EventType::NodeCreated => {
+                        let function = Uuid::parse_str(
+                            event
+                                .path
+                                .split('/')
+                                .nth(2)
+                                .ok_or(anyhow!("Invalid function znode path"))?,
+                        )?;
+                        event!(Level::DEBUG, function = %function, "Function created");
+                        mon_.load_backends(&zk_, function).await?;
+                    }
+                    zookeeper_client::EventType::NodeDeleted => {
+                        let function = Uuid::parse_str(
+                            event
+                                .path
+                                .split('/')
+                                .nth(2)
+                                .ok_or(anyhow!("Invalid function znode path"))?,
+                        )?;
+                        event!(Level::DEBUG, function = %function, "Function deleted");
+                        mon_.backends.write().await.remove(&function);
+                    }
+                    zookeeper_client::EventType::NodeDataChanged => {
+                        let function = Uuid::parse_str(
+                            event
+                                .path
+                                .split('/')
+                                .nth(2)
+                                .ok_or(anyhow!("Invalid function znode path"))?,
+                        )?;
+                        event!(Level::DEBUG, function = %function, "Function backends updated");
+                        mon_.load_backends(&zk_, function).await?;
+                    }
+                    _ => {
+                        event!(Level::WARN, "Unexpected ZooKeeper event: {:?}", event);
+                    }
+                }
+            }
+        });
+
+        let mon_ = mon.clone();
+        let zk_ = zk.clone();
+        let route_watch: JoinHandle<Result<(), anyhow::Error>> = tokio::spawn(async move {
+            loop {
+                let event = route_watcher.changed().await;
+                event!(Level::TRACE, "ZooKeeper event: {:?}", event);
+
+                if event.event_type == zookeeper_client::EventType::Session
+                    && (event.session_state == zookeeper_client::SessionState::Disconnected
+                        || event.session_state == zookeeper_client::SessionState::Expired
+                        || event.session_state == zookeeper_client::SessionState::Closed)
+                {
+                    event!(Level::ERROR, "ZooKeeper session disconnected or terminal");
+                    return Err(anyhow!("ZooKeeper session disconnected or terminal"));
+                }
+
+                match event.event_type {
+                    zookeeper_client::EventType::NodeCreated => {
+                        let route = event
+                            .path
+                            .split('/')
+                            .nth(2)
+                            .ok_or(anyhow!("Invalid route znode path"))?
+                            .to_string();
+                        let target = Uuid::from_slice(
+                            &zk_.get_data(&event.path)
+                                .await
+                                .context("Error getting route target")?
+                                .0,
+                        )?;
+                        event!(Level::DEBUG, route = %route, function = %target, "Route created");
+                        mon_.routes.write().await.insert(route, target);
+                    }
+                    zookeeper_client::EventType::NodeDeleted => {
+                        let route = event
+                            .path
+                            .split('/')
+                            .nth(2)
+                            .ok_or(anyhow!("Invalid route znode path"))?
+                            .to_string();
+                        event!(Level::DEBUG, route = %route, "Route deleted");
+                        mon_.routes.write().await.remove(&route);
+                    }
+                    zookeeper_client::EventType::NodeDataChanged => {
+                        let route = event
+                            .path
+                            .split('/')
+                            .nth(2)
+                            .ok_or(anyhow!("Invalid route znode path"))?
+                            .to_string();
+                        let target = Uuid::from_slice(
+                            &zk_.get_data(&event.path)
+                                .await
+                                .context("Error getting route target")?
+                                .0,
+                        )?;
+                        event!(Level::DEBUG, route = %route, function = %target, "Route created");
+                        mon_.routes.write().await.insert(route, target);
+                    }
+                    _ => {
+                        event!(Level::WARN, "Unexpected ZooKeeper event: {:?}", event);
+                    }
+                }
+            }
+        });
+
+        let _ = tokio::try_join!(func_watch, route_watch)?;
+        Ok(())
     }
 
     async fn load_backends(&self, zk: &zookeeper_client::Client, function_id: Uuid) -> Result<()> {
@@ -203,15 +303,48 @@ impl BackendMonitor {
 
 #[instrument(skip(monitor, http_client, req))]
 #[axum::debug_handler]
+async fn invoke_function(
+    State((monitor, http_client)): State<(
+        Arc<BackendMonitor>,
+        hyper::client::Client<hyper::client::HttpConnector, Body>,
+    )>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    req: Request<Body>,
+) -> Result<axum::response::Response<hyper::Body>, ApiError> {
+    invoke_function_path(
+        State((monitor, http_client)),
+        Path("".to_string()),
+        ConnectInfo(addr),
+        req,
+    )
+    .await
+}
+
+#[instrument(skip(monitor, http_client, req))]
+#[axum::debug_handler]
 async fn invoke_function_path(
     State((monitor, http_client)): State<(
         Arc<BackendMonitor>,
         hyper::client::Client<hyper::client::HttpConnector, Body>,
     )>,
-    Path((function_id, reqpath)): Path<(Uuid, String)>,
+    Path(reqpath): Path<String>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request<Body>,
 ) -> Result<axum::response::Response<hyper::Body>, ApiError> {
+    let function_id = monitor
+        .routes
+        .read()
+        .await
+        .get(
+            &req.headers()
+                .get("Host")
+                .ok_or(GenericError::NotFound)?
+                .to_str()
+                .map_err(|_| GenericError::NotFound)?
+                .to_string(),
+        )
+        .ok_or(GenericError::NotFound)?
+        .clone();
     let backend = monitor.pick_backend(&function_id, &addr.ip()).await?;
 
     let mut req = req;
@@ -226,7 +359,8 @@ async fn invoke_function_path(
     .parse()?;
     req.headers_mut().insert(
         "SCRIPT_NAME",
-        format!("/invoke/{}", function_id).parse().unwrap(),
+        "/".parse().unwrap(),
+        //format!("/invoke/{}", function_id).parse().unwrap(),
     );
     let cx = tracing::Span::current().context();
     opentelemetry::global::get_text_map_propagator(|propagator| {
@@ -238,26 +372,13 @@ async fn invoke_function_path(
     Ok(http_client.request(req).await?)
 }
 
-async fn invoke_function(
-    state: State<(
-        Arc<BackendMonitor>,
-        hyper::client::Client<hyper::client::HttpConnector, Body>,
-    )>,
-    Path(function_id): Path<Uuid>,
-    addr: ConnectInfo<SocketAddr>,
-    req: Request<Body>,
-) -> Result<axum::response::Response<hyper::Body>, ApiError> {
-    invoke_function_path(state, Path((function_id, "".to_string())), addr, req).await
-}
-
 pub fn app() -> axum::Router<(
     Arc<BackendMonitor>,
     hyper::client::Client<hyper::client::HttpConnector, Body>,
 )> {
     axum::Router::new()
-        .route("/invoke/:function_id", any(invoke_function))
-        .route("/invoke/:function_id/", any(invoke_function))
-        .route("/invoke/:function_id/*reqpath", any(invoke_function_path))
+        .route("/", any(invoke_function))
+        .route("/*reqpath", any(invoke_function_path))
 }
 
 #[tokio::main]
@@ -284,7 +405,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer::default())
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
         .layer(OtelAxumMetricsLayer::new())
-        .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
+        //.route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
         .with_state((monitor, http_client))
         .layer(
             ServiceBuilder::new()

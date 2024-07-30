@@ -213,6 +213,15 @@ async fn function_create(
         &zookeeper_client::CreateMode::Persistent.with_acls(zookeeper_client::Acls::anyone_all()),
     )?;
 
+    for route in &new_definition.routes {
+        multi.add_create(
+            &format!("/route/{}", route.hostname),
+            function_id.as_bytes(),
+            &zookeeper_client::CreateMode::Persistent
+                .with_acls(zookeeper_client::Acls::anyone_all()),
+        )?;
+    }
+
     sqlx::raw_sql(&format!(
         r#"
 CREATE ROLE "{0}_db" NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOLOGIN;
@@ -281,6 +290,19 @@ async fn function_update(
     let zk = state.zk().await?;
 
     {
+        let old_definition: FunctionDefinition = serde_json::from_slice(
+            &zk.get_data(&format!("/function/{}", &function_id))
+                .await
+                .map_err(|e| {
+                    if e == zookeeper_client::Error::NoNode {
+                        ApiError::NotFound
+                    } else {
+                        ApiError::Error(e.into())
+                    }
+                })?
+                .0,
+        )?;
+
         // Get current backends
         let function_backends_key = format!("/function/{}/backends", &function_id);
         let (function_backends_raw, functions_backends_stat) = zk
@@ -299,6 +321,19 @@ async fn function_update(
                 &serde_json::to_vec(&new_definition)?,
                 None,
             )?;
+
+            for route in &old_definition.routes {
+                multi.add_delete(&format!("/route/{}", route.hostname), None)?;
+            }
+
+            for route in &new_definition.routes {
+                multi.add_create(
+                    &format!("/route/{}", route.hostname),
+                    function_id.as_bytes(),
+                    &zookeeper_client::CreateMode::Persistent
+                        .with_acls(zookeeper_client::Acls::anyone_all()),
+                )?;
+            }
         }
 
         // Clear the function's backend list
@@ -357,6 +392,19 @@ async fn function_delete(
 ) -> Result<(), ApiError> {
     let zk = state.zk().await?;
 
+    let function_definition: FunctionDefinition = serde_json::from_slice(
+        &zk.get_data(&format!("/function/{}", &function_id))
+            .await
+            .map_err(|e| {
+                if e == zookeeper_client::Error::NoNode {
+                    ApiError::NotFound
+                } else {
+                    ApiError::Error(e.into())
+                }
+            })?
+            .0,
+    )?;
+
     // Get current backends
     let function_backends_key = format!("/function/{}/backends", &function_id);
     let (function_backends_raw, functions_backends_stat) = zk
@@ -387,6 +435,10 @@ async fn function_delete(
             &format!("/node/{}/container/{}", backend.ip, backend.container_id),
             None,
         )?;
+    }
+
+    for route in &function_definition.routes {
+        multi.add_delete(&format!("/route/{}", route.hostname), None)?;
     }
 
     multi.commit().await.context("Error deleting function")?;

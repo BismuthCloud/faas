@@ -193,6 +193,16 @@ async fn main() -> Result<()> {
             .await
             .context("Error creating /function")?;
 
+            // /route/hostname has data with function id
+            zk.create(
+                "/route",
+                &b""[..],
+                &zookeeper_client::CreateMode::Persistent
+                    .with_acls(zookeeper_client::Acls::anyone_all()),
+            )
+            .await
+            .context("Error creating /route")?;
+
             info!("Cluster successfully bootstrapped");
         }
         Command::Consistency {} => {
