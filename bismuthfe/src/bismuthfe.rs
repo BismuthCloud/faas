@@ -357,11 +357,7 @@ async fn invoke_function_path(
         req.uri().query().unwrap_or("")
     )
     .parse()?;
-    req.headers_mut().insert(
-        "SCRIPT_NAME",
-        "/".parse().unwrap(),
-        //format!("/invoke/{}", function_id).parse().unwrap(),
-    );
+
     let cx = tracing::Span::current().context();
     opentelemetry::global::get_text_map_propagator(|propagator| {
         propagator.inject_context(
