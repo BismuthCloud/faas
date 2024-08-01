@@ -121,6 +121,9 @@ impl ContainerManager {
             .map(|i| i.name)
             .collect();
 
+        // Occasionally hit a panic in the unwrap() below, so sleep for a sec to let things settle.
+        sleep(std::time::Duration::from_secs(1)).await;
+
         // Remove old rootfs's
         let snapshotter =
             std::env::var("CONTAINERD_SNAPSHOTTER").unwrap_or("overlayfs".to_string());
@@ -432,9 +435,20 @@ impl ContainerManager {
                     event!(Level::DEBUG, function_id = %function_id, container_id = %container_id, "Creating new container");
                     let container = cm
                         .create_container(function_id, container_id, definition)
-                        .await?;
+                        .await;
 
-                    tokio::task::spawn(Self::watch_startup(cm.clone(), container, zk.clone()));
+                    match container {
+                        Ok(container) => {
+                            tokio::task::spawn(Self::watch_startup(
+                                cm.clone(),
+                                container,
+                                zk.clone(),
+                            ));
+                        }
+                        Err(e) => {
+                            event!(Level::ERROR, container_id = %container_id, error = %e, "Failed to create container");
+                        }
+                    }
                 }
                 zookeeper_client::EventType::NodeDeleted => {
                     event!(Level::DEBUG, container_id = %container_id, "Deleting container");

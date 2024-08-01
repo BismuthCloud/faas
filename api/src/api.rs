@@ -159,7 +159,7 @@ async fn function_logs(
     // TODO
     let backend = backends.first().unwrap();
 
-    Ok(state
+    let resp = state
         .http_client
         .get(
             format!(
@@ -171,7 +171,18 @@ async fn function_logs(
             )
             .parse()?,
         )
-        .await?)
+        .await;
+
+    match resp {
+        Ok(resp) => Ok(resp),
+        Err(e) => {
+            if e.is_connect() {
+                Err(ApiError::Status(StatusCode::SERVICE_UNAVAILABLE))
+            } else {
+                Err(ApiError::Error(e.into()))
+            }
+        }
+    }
 }
 
 #[instrument(skip(state))]
