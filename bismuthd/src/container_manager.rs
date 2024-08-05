@@ -808,7 +808,7 @@ impl ContainerManager {
     ) -> Result<()> {
         let container_id = container.read().await.id;
 
-        for _ in 0..100 {
+        loop {
             sleep(std::time::Duration::from_millis(100)).await;
             if container
                 .read()
@@ -936,6 +936,7 @@ mod tests {
                     "master".to_string(),
                 )),
                 max_instances: 1,
+                routes: vec![],
             },
             container_id,
         )
@@ -986,6 +987,7 @@ mod tests {
                 "master".to_string(),
             )),
             max_instances: 1,
+            routes: vec![],
         };
 
         // Bootstrap ZK

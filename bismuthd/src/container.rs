@@ -425,8 +425,6 @@ impl Container {
             //.gid(1337)
             .stdin(std::process::Stdio::null())
             // TODO(ghost): redirect to internal logging
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
             .spawn()?;
 
         event!(Level::TRACE, container_id = %self.containerd_id, pid = %svcprovider.id().unwrap(), "Started svcprovider");
