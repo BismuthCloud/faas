@@ -301,7 +301,7 @@ impl ContainerManager {
 
         let containerd_meter = opentelemetry::global::meter("containerd");
         let cpu_utilization = containerd_meter
-            .u64_observable_gauge("cpu_utilization")
+            .u64_observable_counter("cpu_utilization")
             .with_description("Container total CPU utilization (user + system)")
             .with_unit(opentelemetry::metrics::Unit::new("usec"))
             .init();
@@ -314,29 +314,29 @@ impl ContainerManager {
         // Gah.
         // We need to use ArcSwap (or some other lock free thing) here because the callback is not async
         // but run on a tokio worker thread, so mutex blocking is not allowed.
-        let metrics: Arc<ArcSwap<HashMap<Uuid, cgroup2_proto::Metrics>>> =
-            Arc::new(ArcSwap::from(Arc::new(HashMap::new())));
+        let metrics: Arc<
+            ArcSwap<HashMap<Uuid, (Vec<opentelemetry::KeyValue>, cgroup2_proto::Metrics)>>,
+        > = Arc::new(ArcSwap::from(Arc::new(HashMap::new())));
         let metrics_ = metrics.clone();
         containerd_meter.register_callback(
             &[cpu_utilization.as_any(), memory_utilization.as_any()],
             move |observer| {
                 let metrics = metrics_.load();
-                for (container_id, container_metrics) in metrics.iter() {
+                for (container_id, (kvs, container_metrics)) in metrics.iter() {
+                    let mut kvs = kvs.clone();
+                    kvs.push(opentelemetry::KeyValue::new(
+                        "container_id",
+                        container_id.to_string(),
+                    ));
                     observer.observe_u64(
                         &cpu_utilization,
                         container_metrics.cpu.as_ref().unwrap().usage_usec,
-                        &[opentelemetry::KeyValue::new(
-                            "container_id",
-                            container_id.to_string(),
-                        )],
+                        &kvs,
                     );
                     observer.observe_u64(
                         &memory_utilization,
                         container_metrics.memory.as_ref().unwrap().usage,
-                        &[opentelemetry::KeyValue::new(
-                            "container_id",
-                            container_id.to_string(),
-                        )],
+                        &kvs,
                     );
                 }
             },
@@ -534,7 +534,7 @@ impl ContainerManager {
 
     async fn poll_metrics(
         cm: Arc<Self>,
-        out: Arc<ArcSwap<HashMap<Uuid, cgroup2_proto::Metrics>>>,
+        out: Arc<ArcSwap<HashMap<Uuid, (Vec<opentelemetry::KeyValue>, cgroup2_proto::Metrics)>>>,
     ) -> Result<()> {
         let mut task_client = TasksClient::new(cm.containerd.clone());
         loop {
@@ -546,9 +546,20 @@ impl ContainerManager {
             let mut new_metrics = HashMap::new();
             for metric in resp.into_inner().metrics {
                 let container_id = Uuid::parse_str(&metric.id)?;
+                let container_ = cm.get_container(container_id).await?;
+                let container = container_.read().await;
                 let metrics: cgroup2_proto::Metrics =
                     prost::Message::decode(metric.data.unwrap().value.as_slice())?;
-                new_metrics.insert(container_id, metrics);
+                new_metrics.insert(
+                    container_id,
+                    (
+                        vec![opentelemetry::KeyValue::new(
+                            "function_id",
+                            container.function_id.to_string(),
+                        )],
+                        metrics,
+                    ),
+                );
             }
             out.store(Arc::new(new_metrics));
             sleep(std::time::Duration::from_secs(10)).await;
