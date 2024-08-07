@@ -300,8 +300,11 @@ impl ContainerManager {
         });
 
         let containerd_meter = opentelemetry::global::meter("containerd");
+        // This should really be a counter since it's a monotonically increasing value (possibly resetting to 0),
+        // but as far as I can tell, there's not a way to "close" the counter so it reports the last value indefinitely
+        // which is incorrect for our use.
         let cpu_utilization = containerd_meter
-            .u64_observable_counter("cpu_utilization")
+            .u64_observable_gauge("cpu_utilization")
             .with_description("Container total CPU utilization (user + system)")
             .with_unit(opentelemetry::metrics::Unit::new("usec"))
             .init();
@@ -548,6 +551,17 @@ impl ContainerManager {
                 let container_id = Uuid::parse_str(&metric.id)?;
                 let container_ = cm.get_container(container_id).await?;
                 let container = container_.read().await;
+
+                if container
+                    .node_data
+                    .runtime
+                    .as_ref()
+                    .map(|r| r.state == ContainerState::Failed || r.state == ContainerState::Paused)
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+
                 let metrics: cgroup2_proto::Metrics =
                     prost::Message::decode(metric.data.unwrap().value.as_slice())?;
                 new_metrics.insert(
