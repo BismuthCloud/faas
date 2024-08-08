@@ -4,6 +4,8 @@ use containerd_client::services::v1::snapshots::RemoveSnapshotRequest;
 use futures::stream::TryStreamExt as _;
 use nix::libc::{kill, SIGKILL};
 use nix::unistd::getpid;
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::fd::AsRawFd;
 use std::time::Duration;
@@ -422,6 +424,12 @@ impl Container {
             "--auth-token".to_string(),
             self.node_data.setup.auth_token.to_string(),
         ];
+        if let Some(quotas) = &self.definition.svc_quotas {
+            for (quota_name, quota_value) in quotas {
+                svcprovider_args.push("--quota".to_string());
+                svcprovider_args.push(format!("{}={}", quota_name, quota_value));
+            }
+        }
         svcprovider_args.extend_from_slice(&svcprovider_opts.args);
 
         let svcprovider = tokio::process::Command::new(&svcprovider_opts.path)

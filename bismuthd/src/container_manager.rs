@@ -953,14 +953,15 @@ mod tests {
         let rootfs = ContainerRoot::new(
             &FunctionDefinition {
                 image: "docker.io/library/alpine:latest".to_string(),
-                invoke_mode: InvokeMode::Executable(vec!["/bin/ls".to_string()]),
-                svc_group_id: None,
-                cpu: 1.0,
-                memory: 128 * 1024 * 1024,
                 repo: Some((
                     url::Url::parse("https://github.com/octocat/Hello-World").unwrap(),
                     "master".to_string(),
                 )),
+                svc_group_id: None,
+                cpu: 1.0,
+                memory: 128 * 1024 * 1024,
+                svc_quotas: None,
+                invoke_mode: InvokeMode::Executable(vec!["/bin/ls".to_string()]),
                 max_instances: 1,
                 routes: vec![],
             },
@@ -1005,6 +1006,7 @@ mod tests {
             svc_group_id: Some(function_id),
             cpu: 1.0,
             memory: 128 * 1024 * 1024,
+            svc_quotas: None,
             invoke_mode: InvokeMode::Server(
                 vec![
                     "/usr/local/bin/python3".to_string(),

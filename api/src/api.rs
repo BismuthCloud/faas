@@ -12,7 +12,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::str::FromStr as _;
 use std::sync::Arc;
 use tower::ServiceBuilder;
-use tracing::instrument;
+use tracing::{event, instrument};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use uuid::Uuid;
@@ -273,7 +273,7 @@ REVOKE ALL ON DATABASE "{0}_db" FROM public;
         .context("Error connecting to function hosted DB")?;
     sqlx::raw_sql(&format!(
         r#"
-GRANT ALL ON SCHEMA public TO "{0}_user" WITH GRANT OPTION;
+GRANT ALL ON SCHEMA public TO "{0}_user";
         "#,
         function_id.as_simple().to_string()
     ))
@@ -511,6 +511,71 @@ struct Cli {
     hosted_db: String,
 }
 
+async fn monitor_db_size(state: Arc<ControlPlaneState>) -> Result<()> {
+    let zk = state.zk().await?;
+    // Get all DBs over 1GB
+    let big_dbs: Vec<(String,i64)> = sqlx::query_as(
+        "SELECT datname, pg_database_size(datname) FROM pg_database WHERE pg_database_size(datname) > 1000000000",
+    )
+    .fetch_all(&state.hosted_db)
+    .await?;
+    for (db, size) in big_dbs {
+        if !db.ends_with("_db") {
+            event!(tracing::Level::INFO, "Unexpected DB name: {}", db);
+            continue;
+        }
+        let function_id = Uuid::from_str(db.strip_suffix("_db").unwrap())?;
+        let definition: FunctionDefinition = serde_json::from_slice(
+            &zk.get_data(&format!("/function/{}", &function_id))
+                .await
+                .map_err(|e| {
+                    if e == zookeeper_client::Error::NoNode {
+                        anyhow!("Stray database? Function {} not found", function_id)
+                    } else {
+                        anyhow!("Error getting function: {}", e)
+                    }
+                })?
+                .0,
+        )?;
+        if let Some(quotas) = definition.svc_quotas {
+            if let Some(sql_quota) = quotas.get("sql") {
+                let connect_opts = (*state.hosted_db.connect_options())
+                    .clone()
+                    .database(&format!("{}_db", function_id.as_simple().to_string()));
+                let new_db = sqlx::PgPool::connect_with(connect_opts)
+                    .await
+                    .context("Error connecting to function hosted DB")?;
+
+                if size as u64 > *sql_quota {
+                    event!(tracing::Level::INFO, "DB {} is over quota, restricting", db);
+                    sqlx::raw_sql(&format!(
+                        r#"
+REVOKE INSERT ON ALL TABLES IN SCHEMA public FROM "{0}_user";
+REVOKE UPDATE ON ALL TABLES IN SCHEMA public FROM "{0}_user";
+                        "#,
+                        function_id.as_simple().to_string()
+                    ))
+                    .execute(&new_db)
+                    .await
+                    .context("Error revoking INSERT + UPDATE permissions on function hosted DB")?;
+                } else {
+                    sqlx::raw_sql(&format!(
+                        r#"
+GRANT INSERT ON ALL TABLES IN SCHEMA public FROM "{0}_user";
+GRANT UPDATE ON ALL TABLES IN SCHEMA public FROM "{0}_user";
+                        "#,
+                        function_id.as_simple().to_string()
+                    ))
+                    .execute(&new_db)
+                    .await
+                    .context("Error granting INSERT + UPDATE permissions on function hosted DB")?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _sentry_guard = init_sentry();
@@ -530,15 +595,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .max_connections(10)
         .connect_lazy(&args.hosted_db)?;
 
+    let state = Arc::new(ControlPlaneState {
+        zookeeper: args.zookeeper,
+        zookeeper_env: args.zookeeper_env,
+        http_client,
+        hosted_db,
+    });
+
+    let state_ = state.clone();
+    tokio::spawn(async move {
+        loop {
+            match monitor_db_size(state_.clone()).await {
+                Ok(_) => unreachable!(),
+                Err(e) => {
+                    tracing::error!("Error monitoring DB size: {:?}", e);
+                }
+            }
+        }
+    });
+
     let app = app()
         .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default())
         .route("/healthz", get(|| async { (StatusCode::OK, "OK") }))
-        .with_state(Arc::new(ControlPlaneState {
-            zookeeper: args.zookeeper,
-            zookeeper_env: args.zookeeper_env,
-            http_client,
-            hosted_db,
-        }))
+        .with_state(state)
         .layer(
             ServiceBuilder::new()
                 .layer(NewSentryLayer::new_from_top())

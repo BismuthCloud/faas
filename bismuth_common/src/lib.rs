@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use url::Url;
@@ -73,6 +74,9 @@ pub struct FunctionDefinition {
 
     /// Memory limit, in bytes.
     pub memory: u64,
+
+    /// Opaque key-value pairs representing quotas of svcprovider-provided services for this function.
+    pub svc_quotas: Option<HashMap<String, u64>>,
 
     /// How to communicate with the container.
     pub invoke_mode: InvokeMode,

@@ -37,6 +37,10 @@ struct Cli {
     /// Auth token
     #[clap(long)]
     auth_token: String,
+
+    /// Quotas (unused)
+    #[clap(long)]
+    quotas: Vec<String>,
 }
 
 struct SVCProviderState {
