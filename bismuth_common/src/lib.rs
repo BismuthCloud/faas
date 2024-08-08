@@ -63,6 +63,11 @@ pub struct FunctionDefinition {
     /// URL of the git repository and branch to clone into the container.
     pub repo: Option<(Url, String)>,
 
+    /// UUID of the "service group" this function is part of.
+    /// Defaults to the function's own UUID.
+    /// This exists to allow for multiple functions to reference the same data.
+    pub svc_group_id: Option<Uuid>,
+
     /// CPU limit, as a fraction of a core.
     pub cpu: f32,
 

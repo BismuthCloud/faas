@@ -414,6 +414,11 @@ impl Container {
             host_ip.to_string(),
             "--function".to_string(),
             self.function_id.to_string(),
+            "--group".to_string(),
+            self.definition
+                .svc_group_id
+                .unwrap_or(self.function_id)
+                .to_string(),
             "--auth-token".to_string(),
             self.node_data.setup.auth_token.to_string(),
         ];
@@ -424,7 +429,6 @@ impl Container {
             //.uid(1337)  // TODO: permission denied
             //.gid(1337)
             .stdin(std::process::Stdio::null())
-            // TODO(ghost): redirect to internal logging
             .spawn()?;
 
         event!(Level::TRACE, container_id = %self.containerd_id, pid = %svcprovider.id().unwrap(), "Started svcprovider");

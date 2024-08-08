@@ -30,6 +30,10 @@ struct Cli {
     #[clap(long)]
     function: Uuid,
 
+    /// Group ID
+    #[clap(long)]
+    group: Uuid,
+
     /// Auth token
     #[clap(long)]
     auth_token: String,
@@ -37,6 +41,7 @@ struct Cli {
 
 struct SVCProviderState {
     function_id: Uuid,
+    group_id: Uuid,
     config: aws_config::SdkConfig,
     dynamodb: aws_sdk_dynamodb::Client,
     s3: aws_sdk_s3::Client,
@@ -49,7 +54,7 @@ impl SVCProviderState {
         if let Err(e) = self
             .dynamodb
             .create_table()
-            .table_name(self.function_id)
+            .table_name(self.group_id)
             .attribute_definitions(
                 aws_sdk_dynamodb::types::AttributeDefinition::builder()
                     .attribute_name("k")
@@ -96,7 +101,7 @@ async fn kv_get(
     let resp = shared_state
         .dynamodb
         .get_item()
-        .table_name(shared_state.function_id)
+        .table_name(shared_state.group_id)
         .key("k", aws_sdk_dynamodb::types::AttributeValue::S(key))
         .send()
         .await
@@ -120,7 +125,7 @@ async fn kv_set(
     match shared_state
         .dynamodb
         .put_item()
-        .table_name(shared_state.function_id)
+        .table_name(shared_state.group_id)
         .item("k", aws_sdk_dynamodb::types::AttributeValue::S(key))
         .item(
             "v",
@@ -146,7 +151,7 @@ async fn kv_delete(
     match shared_state
         .dynamodb
         .delete_item()
-        .table_name(shared_state.function_id)
+        .table_name(shared_state.group_id)
         .key("k", aws_sdk_dynamodb::types::AttributeValue::S(key))
         .send()
         .await
@@ -168,7 +173,7 @@ async fn secret_get(
     let resp = shared_state
         .secretsmanager
         .get_secret_value()
-        .secret_id(format!("{}-{}", shared_state.function_id, key))
+        .secret_id(format!("{}-{}", shared_state.group_id, key))
         .send()
         .await
         .map_err(|e| {
@@ -376,9 +381,10 @@ async fn main() -> Result<()> {
     let config = aws_config::load_from_env().await;
     let shared_state = Arc::new(SVCProviderState {
         function_id: args.function,
+        group_id: args.group,
         dynamodb: aws_sdk_dynamodb::Client::new(&config),
         s3: aws_sdk_s3::Client::new(&config),
-        bucket: format!("bismuth-{}", args.function),
+        bucket: format!("bismuth-{}", args.group),
         secretsmanager: aws_sdk_secretsmanager::Client::new(&config),
         config,
     });
@@ -426,6 +432,7 @@ mod tests {
             let function_id = Uuid::new_v4();
             let shared_state = Arc::new(SVCProviderState {
                 function_id,
+                group_id: function_id,
                 dynamodb: aws_sdk_dynamodb::Client::new(&config),
                 s3: aws_sdk_s3::Client::new(&config),
                 bucket: format!("bismuth-{}", function_id),

@@ -954,6 +954,7 @@ mod tests {
             &FunctionDefinition {
                 image: "docker.io/library/alpine:latest".to_string(),
                 invoke_mode: InvokeMode::Executable(vec!["/bin/ls".to_string()]),
+                svc_group_id: None,
                 cpu: 1.0,
                 memory: 128 * 1024 * 1024,
                 repo: Some((
@@ -997,6 +998,13 @@ mod tests {
         let container_id = Uuid::from_str("00000000-0000-4000-0000-000000000003").unwrap();
         let function_definition = FunctionDefinition {
             image: "docker.io/library/python:3.11".to_string(),
+            repo: Some((
+                url::Url::parse("https://github.com/octocat/Hello-World").unwrap(),
+                "master".to_string(),
+            )),
+            svc_group_id: Some(function_id),
+            cpu: 1.0,
+            memory: 128 * 1024 * 1024,
             invoke_mode: InvokeMode::Server(
                 vec![
                     "/usr/local/bin/python3".to_string(),
@@ -1005,12 +1013,6 @@ mod tests {
                 ],
                 8000,
             ),
-            cpu: 1.0,
-            memory: 128 * 1024 * 1024,
-            repo: Some((
-                url::Url::parse("https://github.com/octocat/Hello-World").unwrap(),
-                "master".to_string(),
-            )),
             max_instances: 1,
             routes: vec![],
         };
