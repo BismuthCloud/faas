@@ -426,7 +426,7 @@ impl Container {
         ];
         if let Some(quotas) = &self.definition.svc_quotas {
             for (quota_name, quota_value) in quotas {
-                svcprovider_args.push("--quota".to_string());
+                svcprovider_args.push("--quotas".to_string());
                 svcprovider_args.push(format!("{}={}", quota_name, quota_value));
             }
         }
